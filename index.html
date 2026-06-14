@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prolonged Hospitalization Risk Calculator — ACS</title>
+<style>
+  :root{
+    --ink:#16242e;
+    --muted:#5d7080;
+    --line:#d9e1e6;
+    --paper:#f7f9fa;
+    --card:#ffffff;
+    --accent:#0a6c74;       /* deep teal — clinical, not corporate blue */
+    --accent-soft:#e3f0f0;
+    --low:#2f8f5b;
+    --mid:#c98a13;
+    --high:#c0392b;
+    --shadow:0 1px 2px rgba(16,36,46,.06),0 8px 28px rgba(16,36,46,.07);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Segoe UI",-apple-system,system-ui,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:880px;margin:0 auto;padding:32px 20px 64px}
+  header{margin-bottom:20px}
+  .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  h1{font-size:23px;margin:6px 0 4px;font-weight:650;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:14px;margin:0}
+  .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:20px;margin-top:24px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 22px 24px;box-shadow:var(--shadow)}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 18px;font-weight:600}
+  .field{margin-bottom:20px}
+  .field:last-child{margin-bottom:0}
+  label.lbl{display:block;font-size:14px;font-weight:600;margin-bottom:8px}
+  .hint{font-size:12px;color:var(--muted);font-weight:400}
+  /* segmented control */
+  .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{flex:1;border:0;background:var(--card);padding:9px 0;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;transition:.15s}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+  .seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  /* slider row */
+  .sliderrow{display:flex;align-items:center;gap:14px}
+  input[type=range]{flex:1;accent-color:var(--accent)}
+  .numbox{width:92px}
+  input[type=number]{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:15px;color:var(--ink);
+    font-variant-numeric:tabular-nums;
+  }
+  input[type=number]:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+  .unit{font-size:12px;color:var(--muted);margin-left:4px}
+  /* result */
+  .result{display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:6px}
+  .gauge{position:relative;width:200px;height:110px;margin:6px 0 4px}
+  .pct{font-size:46px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1}
+  .pctlabel{font-size:13px;color:var(--muted);margin-top:2px}
+  .band{display:inline-block;margin-top:14px;padding:5px 14px;border-radius:999px;font-size:13px;font-weight:600}
+  .logitline{margin-top:18px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:center}
+  .logitline b{color:var(--ink);font-weight:600}
+  .foot{margin-top:26px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;line-height:1.6}
+  .foot code{background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:5px;font-size:11.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Acute Coronary Syndrome</div>
+    <h1>Prolonged Hospitalization Risk Calculator</h1>
+    <p class="sub">Estimates the probability of length of stay &gt; 8 days using Killip class, CCU admission, ejection fraction, and ln(BNP).</p>
+  </header>
+
+  <div class="grid">
+    <!-- INPUTS -->
+    <div class="card">
+      <h2>Patient inputs</h2>
+
+      <div class="field">
+        <label class="lbl">Killip class <span class="hint">(reference: class I)</span></label>
+        <div class="seg" id="killip" role="group" aria-label="Killip class">
+          <button type="button" data-v="1" aria-pressed="true">I</button>
+          <button type="button" data-v="2" aria-pressed="false">II</button>
+          <button type="button" data-v="3" aria-pressed="false">III</button>
+          <button type="button" data-v="4" aria-pressed="false">IV</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl">CCU admission</label>
+        <div class="seg" id="ccu" role="group" aria-label="CCU admission">
+          <button type="button" data-v="0" aria-pressed="true">No</button>
+          <button type="button" data-v="1" aria-pressed="false">Yes</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl" for="efnum">Ejection fraction <span class="unit">%</span></label>
+        <div class="sliderrow">
+          <input type="range" id="efrange" min="10" max="80" step="1" value="55" aria-label="Ejection fraction slider">
+          <div class="numbox"><input type="number" id="efnum" min="10" max="80" step="1" value="55"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl" for="bnpnum">BNP <span class="hint">(same unit as model fitting, e.g. pg/mL)</span></label>
+        <div class="sliderrow">
+          <input type="range" id="bnprange" min="5" max="3000" step="5" value="200" aria-label="BNP slider">
+          <div class="numbox"><input type="number" id="bnpnum" min="1" max="35000" step="1" value="200"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULT -->
+    <div class="card">
+      <h2>Predicted risk</h2>
+      <div class="result">
+        <div class="gauge">
+          <svg viewBox="0 0 200 110" width="200" height="110">
+            <path d="M14 100 A86 86 0 0 1 186 100" fill="none" stroke="var(--line)" stroke-width="14" stroke-linecap="round"/>
+            <path id="arc" d="M14 100 A86 86 0 0 1 186 100" fill="none" stroke="var(--accent)" stroke-width="14" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="pct" id="pct">—</div>
+        <div class="pctlabel">probability of LOS &gt; 8 days</div>
+        <span class="band" id="band">—</span>
+        <div class="logitline">logit(P) = <b id="logit">—</b></div>
+      </div>
+
+      <div class="foot">
+        Model: <code>logit(P) = −1.959 − 0.005·KillipII + 0.608·KillipIII + 2.133·KillipIV + 0.723·CCU − 0.025·EF + 0.281·ln(BNP)</code>.
+        Risk bands (low &lt;20%, intermediate 20–40%, high &gt;40%) are display aids only and are not validated cut-points.
+        For research and educational use; external validation pending.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---- coefficients (from the published logistic model) ----
+  const B0   = -1.959;
+  const bK2  = -0.005, bK3 = 0.608, bK4 = 2.133;
+  const bCCU =  0.723;
+  const bEF  = -0.025;
+  const bBNP =  0.281;   // per unit of ln(BNP)
+
+  const state = { killip:1, ccu:0, ef:55, bnp:200 };
+
+  const arc   = document.getElementById('arc');
+  const ARC_LEN = arc.getTotalLength();
+  arc.style.strokeDasharray = ARC_LEN;
+
+  function compute(){
+    const k2 = state.killip===2?1:0;
+    const k3 = state.killip===3?1:0;
+    const k4 = state.killip===4?1:0;
+    const lnbnp = Math.log(Math.max(state.bnp, 1)); // guard ln(0)
+    const logit = B0 + bK2*k2 + bK3*k3 + bK4*k4 + bCCU*state.ccu + bEF*state.ef + bBNP*lnbnp;
+    const p = 1/(1+Math.exp(-logit));
+    return {logit, p};
+  }
+
+  function colorFor(p){
+    if(p<0.20) return getComputedStyle(document.documentElement).getPropertyValue('--low');
+    if(p<0.40) return getComputedStyle(document.documentElement).getPropertyValue('--mid');
+    return getComputedStyle(document.documentElement).getPropertyValue('--high');
+  }
+  function bandText(p){
+    if(p<0.20) return ['Low', '--low', '--accent-soft'];
+    if(p<0.40) return ['Intermediate','--mid'];
+    return ['High','--high'];
+  }
+
+  function render(){
+    const {logit,p} = compute();
+    const pctEl = document.getElementById('pct');
+    pctEl.textContent = (p*100).toFixed(1)+'%';
+    document.getElementById('logit').textContent = logit.toFixed(3);
+
+    const col = colorFor(p).trim();
+    pctEl.style.color = col;
+    arc.style.stroke = col;
+    arc.style.strokeDashoffset = ARC_LEN*(1-p);
+
+    const b = document.getElementById('band');
+    const [txt, cvar] = bandText(p);
+    const c = getComputedStyle(document.documentElement).getPropertyValue(cvar).trim();
+    b.textContent = txt + ' risk';
+    b.style.color = c;
+    b.style.background = c+'1f'; // ~12% alpha
+  }
+
+  // segmented controls
+  function wireSeg(id, key){
+    const grp = document.getElementById(id);
+    grp.addEventListener('click', e=>{
+      const btn = e.target.closest('button'); if(!btn) return;
+      [...grp.children].forEach(b=>b.setAttribute('aria-pressed','false'));
+      btn.setAttribute('aria-pressed','true');
+      state[key] = parseInt(btn.dataset.v,10);
+      render();
+    });
+  }
+  wireSeg('killip','killip');
+  wireSeg('ccu','ccu');
+
+  // linked slider + number pairs
+  function link(rangeId, numId, key, min, max){
+    const r=document.getElementById(rangeId), n=document.getElementById(numId);
+    function set(v){
+      v = Math.min(max, Math.max(min, v||min));
+      state[key]=v; r.value=Math.min(r.max,Math.max(r.min,v)); n.value=v; render();
+    }
+    r.addEventListener('input', ()=>set(parseFloat(r.value)));
+    n.addEventListener('input', ()=>set(parseFloat(n.value)));
+  }
+  link('efrange','efnum','ef',10,80);
+  link('bnprange','bnpnum','bnp',1,35000);
+
+  render();
+</script>
+</body>
+</html>
