@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Prolonged Hospitalization Risk Calculator — ACS</title>
+<title>Prolonged LOS Risk Calculator — ACS</title>
 <style>
   :root{
     --ink:#16242e;
@@ -64,163 +64,191 @@
   .logitline b{color:var(--ink);font-weight:600}
   .foot{margin-top:26px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;line-height:1.6}
   .foot code{background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:5px;font-size:11.5px}
+
+  .field-note{margin:6px 0 0;font-size:12px;color:var(--muted)}
+  .field-error{margin:6px 0 0;font-size:12px;color:#a02f24}
+  [aria-invalid="true"]{border-color:#a02f24!important}
+  .extrapolation{margin:6px 0 0;font-size:12px;color:#805d0d}
+  .error-summary{font-size:13px;color:#a02f24;margin-bottom:12px}
+  .actions{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}
+  .actions button{padding:11px 16px;border-radius:9px;border:1px solid var(--accent);font:inherit;font-size:14px;cursor:pointer}
+  .primary{background:var(--accent);color:white}.secondary{background:white;color:var(--accent)}
+  .actions button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  .result-status{font-size:13px;color:var(--muted);margin:16px 0 0}
+  .risk-definition{font-size:13px;color:var(--muted);margin-top:8px}
+  .risk-guide{padding-left:18px;margin-bottom:0}
+  [hidden]{display:none!important}
+  @media(max-width:400px){.wrap{padding:20px 12px 40px}.card{padding:18px 16px}.grid{gap:16px}h1{font-size:21px}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div class="eyebrow">Acute Coronary Syndrome</div>
-    <h1>Prolonged Hospitalization Risk Calculator</h1>
-    <p class="sub">Estimates the probability of length of stay &gt; 8 days using Killip class, CCU admission, ejection fraction, and ln(BNP).</p>
+    <h1>Prolonged LOS Risk Calculator</h1>
+    <p class="sub">Prolonged length of stay was defined as a hospital stay &gt;8 days.</p>
+    <p class="sub">The model uses information available within the first 48 hours after hospital admission.</p>
   </header>
-
   <div class="grid">
-    <!-- INPUTS -->
-    <div class="card">
+    <form class="card" id="calculator" novalidate>
       <h2>Patient inputs</h2>
-
+      <div class="error-summary" id="error-summary" role="alert" hidden></div>
       <div class="field">
-        <label class="lbl">Killip class <span class="hint">(reference: class I)</span></label>
-        <div class="seg" id="killip" role="group" aria-label="Killip class">
-          <button type="button" data-v="1" aria-pressed="true">I</button>
-          <button type="button" data-v="2" aria-pressed="false">II</button>
-          <button type="button" data-v="3" aria-pressed="false">III</button>
-          <button type="button" data-v="4" aria-pressed="false">IV</button>
-        </div>
+        <label class="lbl" for="pulseRate">Pulse rate <span class="unit">beats/min</span></label>
+        <input type="number" id="pulseRate" step="any" inputmode="decimal" required aria-describedby="pulseRate-note pulseRate-error pulseRate-warning">
+        <p class="field-note" id="pulseRate-note">Observed range in the development cohort: 40–185 beats/min.</p>
+        <p class="field-error" id="pulseRate-error" hidden></p><p class="extrapolation" id="pulseRate-warning" hidden></p>
       </div>
-
       <div class="field">
-        <label class="lbl">CCU admission</label>
-        <div class="seg" id="ccu" role="group" aria-label="CCU admission">
-          <button type="button" data-v="0" aria-pressed="true">No</button>
-          <button type="button" data-v="1" aria-pressed="false">Yes</button>
+        <label class="lbl" id="killip-label">Killip class <span class="hint">(reference: class I)</span></label>
+        <div class="seg" id="killipClass" role="group" aria-labelledby="killip-label" aria-describedby="killipClass-error">
+          <button type="button" data-v="I" aria-pressed="false">I</button>
+          <button type="button" data-v="II" aria-pressed="false">II</button>
+          <button type="button" data-v="III" aria-pressed="false">III</button>
+          <button type="button" data-v="IV" aria-pressed="false">IV</button>
         </div>
+        <p class="field-error" id="killipClass-error" hidden></p>
       </div>
-
       <div class="field">
-        <label class="lbl" for="efnum">Ejection fraction <span class="unit">%</span></label>
-        <div class="sliderrow">
-          <input type="range" id="efrange" min="10" max="80" step="1" value="55" aria-label="Ejection fraction slider">
-          <div class="numbox"><input type="number" id="efnum" min="10" max="80" step="1" value="55"></div>
-        </div>
+        <label class="lbl" for="ef">EF <span class="unit">%</span></label>
+        <input type="number" id="ef" step="any" inputmode="decimal" required aria-describedby="ef-note ef-error ef-warning">
+        <p class="field-note" id="ef-note">Ejection fraction: enter 50 for 50%, not 0.50. Observed range in the development cohort: 10–75%.</p>
+        <p class="field-error" id="ef-error" hidden></p><p class="extrapolation" id="ef-warning" hidden></p>
       </div>
-
       <div class="field">
-        <label class="lbl" for="bnpnum">BNP <span class="hint">(same unit as model fitting, e.g. pg/mL)</span></label>
-        <div class="sliderrow">
-          <input type="range" id="bnprange" min="5" max="3000" step="5" value="200" aria-label="BNP slider">
-          <div class="numbox"><input type="number" id="bnpnum" min="1" max="35000" step="1" value="200"></div>
-        </div>
+        <label class="lbl" for="ntProBNP">NT-proBNP <span class="unit">pg/mL</span></label>
+        <input type="number" id="ntProBNP" step="any" inputmode="decimal" required aria-describedby="ntProBNP-note ntProBNP-error ntProBNP-warning">
+        <p class="field-note" id="ntProBNP-note">N-terminal pro-B-type natriuretic peptide. Enter the original clinical value. Observed range in the development cohort: 2–35,000 pg/mL.</p>
+        <p class="field-error" id="ntProBNP-error" hidden></p><p class="extrapolation" id="ntProBNP-warning" hidden></p>
       </div>
-    </div>
-
-    <!-- RESULT -->
-    <div class="card">
-      <h2>Predicted risk</h2>
-      <div class="result">
-        <div class="gauge">
+      <div class="field">
+        <label class="lbl" for="dDimer">D-dimer <span class="unit">μg/mL</span></label>
+        <input type="number" id="dDimer" step="any" inputmode="decimal" required aria-describedby="dDimer-note dDimer-error dDimer-warning">
+        <p class="field-note" id="dDimer-note">Enter the original clinical value. Observed range in the development cohort: 0.07–40.1 μg/mL.</p>
+        <p class="field-error" id="dDimer-error" hidden></p><p class="extrapolation" id="dDimer-warning" hidden></p>
+      </div>
+      <div class="field">
+        <label class="lbl" id="ccu-label">CCU admission within the first 48 hours</label>
+        <div class="seg" id="ccuWithin48h" role="group" aria-labelledby="ccu-label" aria-describedby="ccu-note ccuWithin48h-error">
+          <button type="button" data-v="No" aria-pressed="false">No</button>
+          <button type="button" data-v="Yes" aria-pressed="false">Yes</button>
+        </div>
+        <p class="field-note" id="ccu-note">Select Yes only if the patient was admitted to the coronary care unit within the first 48 hours after hospital admission. If the first CCU admission occurred after 48 hours, select No.</p>
+        <p class="field-error" id="ccuWithin48h-error" hidden></p>
+      </div>
+      <div class="actions"><button class="primary" type="submit">Calculate probability</button><button class="secondary" type="reset">Reset</button></div>
+    </form>
+    <section class="card" aria-labelledby="result-title">
+      <h2 id="result-title">Prediction</h2>
+      <div class="result" aria-live="polite" aria-atomic="true">
+        <div class="gauge" aria-hidden="true">
           <svg viewBox="0 0 200 110" width="200" height="110">
             <path d="M14 100 A86 86 0 0 1 186 100" fill="none" stroke="var(--line)" stroke-width="14" stroke-linecap="round"/>
             <path id="arc" d="M14 100 A86 86 0 0 1 186 100" fill="none" stroke="var(--accent)" stroke-width="14" stroke-linecap="round"/>
           </svg>
         </div>
         <div class="pct" id="pct">—</div>
-        <div class="pctlabel">probability of LOS &gt; 8 days</div>
-        <span class="band" id="band">—</span>
-        <div class="logitline">logit(P) = <b id="logit">—</b></div>
+        <div class="pctlabel">Predicted probability of prolonged LOS</div>
+        <span class="band" id="band" hidden></span>
+        <div class="risk-definition" id="risk-definition" hidden></div>
+        <p class="result-status" id="result-status">Complete all six inputs and select Calculate probability.</p>
       </div>
-
       <div class="foot">
-        Model: <code>logit(P) = −1.959 − 0.005·KillipII + 0.608·KillipIII + 2.133·KillipIV + 0.723·CCU − 0.025·EF + 0.281·ln(BNP)</code>.
-        Risk bands (low &lt;20%, intermediate 20–40%, high &gt;40%) are display aids only and are not validated cut-points.
-        For research and educational use; external validation pending.
+        <strong>Risk groups</strong>
+        <ul class="risk-guide"><li>Low risk: predicted probability &lt;10%.</li><li>Intermediate risk: predicted probability 10% to &lt;39%.</li><li>High risk: predicted probability ≥39%.</li></ul>
+        <p>Risk groups use the unrounded probability. The displayed percentage is rounded to one decimal place.</p>
+        <strong>About the model</strong>
+        <p>The predicted probability is calculated using a multivariable logistic regression model incorporating pulse rate, Killip class, EF, NT-proBNP, D-dimer, and CCU admission within the first 48 hours.</p>
+        <p>NT-proBNP and D-dimer are entered in their original units and transformed using the natural logarithm for calculation.</p>
       </div>
-    </div>
+    </section>
   </div>
+  <footer class="foot">
+    <p>This calculator was developed for research purposes and is intended to support, not replace, clinical judgment.</p>
+    <p>The model was developed from a single-center cohort and has undergone internal holdout validation; external validation is required before broader clinical implementation.</p>
+    <p id="model-version">Model version: September 2026 (48-h model)</p>
+  </footer>
 </div>
-
+<script src="calculator-model.js"></script>
 <script>
-  // ---- coefficients (from the published logistic model) ----
-  const B0   = -1.959;
-  const bK2  = -0.005, bK3 = 0.608, bK4 = 2.133;
-  const bCCU =  0.723;
-  const bEF  = -0.025;
-  const bBNP =  0.281;   // per unit of ln(BNP)
-
-  const state = { killip:1, ccu:0, ef:55, bnp:200 };
-
-  const arc   = document.getElementById('arc');
-  const ARC_LEN = arc.getTotalLength();
-  arc.style.strokeDasharray = ARC_LEN;
-
-  function compute(){
-    const k2 = state.killip===2?1:0;
-    const k3 = state.killip===3?1:0;
-    const k4 = state.killip===4?1:0;
-    const lnbnp = Math.log(Math.max(state.bnp, 1)); // guard ln(0)
-    const logit = B0 + bK2*k2 + bK3*k3 + bK4*k4 + bCCU*state.ccu + bEF*state.ef + bBNP*lnbnp;
-    const p = 1/(1+Math.exp(-logit));
-    return {logit, p};
+  'use strict';
+  const form = document.getElementById('calculator');
+  const numericFields = ['pulseRate', 'ef', 'ntProBNP', 'dDimer'];
+  const selections = { killipClass: undefined, ccuWithin48h: undefined };
+  const arc = document.getElementById('arc');
+  const arcLength = arc.getTotalLength();
+  arc.style.strokeDasharray = arcLength;
+  arc.style.strokeDashoffset = arcLength;
+  document.getElementById('model-version').textContent = 'Model version: ' + ACSModel.VERSION;
+  function clearFeedback() {
+    document.querySelectorAll('.field-error,.extrapolation,#error-summary').forEach(el => { el.textContent = ''; el.hidden = true; });
+    form.querySelectorAll('[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
   }
-
-  function colorFor(p){
-    if(p<0.20) return getComputedStyle(document.documentElement).getPropertyValue('--low');
-    if(p<0.40) return getComputedStyle(document.documentElement).getPropertyValue('--mid');
-    return getComputedStyle(document.documentElement).getPropertyValue('--high');
+  function clearResult(message) {
+    document.getElementById('pct').textContent = '—';
+    document.getElementById('pct').style.color = '';
+    document.getElementById('band').hidden = true;
+    document.getElementById('risk-definition').hidden = true;
+    document.getElementById('result-status').textContent = message;
+    arc.style.strokeDashoffset = arcLength;
   }
-  function bandText(p){
-    if(p<0.20) return ['Low', '--low', '--accent-soft'];
-    if(p<0.40) return ['Intermediate','--mid'];
-    return ['High','--high'];
+  function invalidate() {
+    clearFeedback();
+    clearResult('Inputs changed. Select Calculate probability to update the result.');
   }
-
-  function render(){
-    const {logit,p} = compute();
-    const pctEl = document.getElementById('pct');
-    pctEl.textContent = (p*100).toFixed(1)+'%';
-    document.getElementById('logit').textContent = logit.toFixed(3);
-
-    const col = colorFor(p).trim();
-    pctEl.style.color = col;
-    arc.style.stroke = col;
-    arc.style.strokeDashoffset = ARC_LEN*(1-p);
-
-    const b = document.getElementById('band');
-    const [txt, cvar] = bandText(p);
-    const c = getComputedStyle(document.documentElement).getPropertyValue(cvar).trim();
-    b.textContent = txt + ' risk';
-    b.style.color = c;
-    b.style.background = c+'1f'; // ~12% alpha
-  }
-
-  // segmented controls
-  function wireSeg(id, key){
-    const grp = document.getElementById(id);
-    grp.addEventListener('click', e=>{
-      const btn = e.target.closest('button'); if(!btn) return;
-      [...grp.children].forEach(b=>b.setAttribute('aria-pressed','false'));
-      btn.setAttribute('aria-pressed','true');
-      state[key] = parseInt(btn.dataset.v,10);
-      render();
+  for (const id of numericFields) document.getElementById(id).addEventListener('input', invalidate);
+  for (const id of Object.keys(selections)) {
+    const group = document.getElementById(id);
+    group.addEventListener('click', event => {
+      const button = event.target.closest('button'); if (!button) return;
+      group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+      selections[id] = id === 'ccuWithin48h' ? button.dataset.v === 'Yes' : button.dataset.v;
+      invalidate();
     });
   }
-  wireSeg('killip','killip');
-  wireSeg('ccu','ccu');
-
-  // linked slider + number pairs
-  function link(rangeId, numId, key, min, max){
-    const r=document.getElementById(rangeId), n=document.getElementById(numId);
-    function set(v){
-      v = Math.min(max, Math.max(min, v||min));
-      state[key]=v; r.value=Math.min(r.max,Math.max(r.min,v)); n.value=v; render();
+  form.addEventListener('submit', event => {
+    event.preventDefault(); clearFeedback();
+    const input = { ...selections };
+    for (const id of numericFields) {
+      const field = document.getElementById(id);
+      input[id] = field.value.trim() === '' ? '' : field.valueAsNumber;
     }
-    r.addEventListener('input', ()=>set(parseFloat(r.value)));
-    n.addEventListener('input', ()=>set(parseFloat(n.value)));
-  }
-  link('efrange','efnum','ef',10,80);
-  link('bnprange','bnpnum','bnp',1,35000);
-
-  render();
+    try {
+      const result = ACSModel.predictProlongedLOS(input);
+      const colors = { 'Low risk': '--low', 'Intermediate risk': '--mid', 'High risk': '--high' };
+      const definitions = { 'Low risk': 'Predicted probability <10%', 'Intermediate risk': 'Predicted probability 10% to <39%', 'High risk': 'Predicted probability ≥39%' };
+      const color = getComputedStyle(document.documentElement).getPropertyValue(colors[result.riskGroup]).trim();
+      document.getElementById('pct').textContent = (result.probability * 100).toFixed(1) + '%';
+      document.getElementById('pct').style.color = color;
+      arc.style.stroke = color; arc.style.strokeDashoffset = arcLength * (1 - result.probability);
+      const band = document.getElementById('band');
+      band.hidden = false; band.textContent = result.riskGroup; band.style.color = color; band.style.background = color + '1f';
+      const definition = document.getElementById('risk-definition');
+      definition.hidden = false; definition.textContent = definitions[result.riskGroup];
+      document.getElementById('result-status').textContent = result.extrapolatedFields.length ? 'One or more inputs involve extrapolation; see the notes below those inputs.' : '';
+      for (const id of result.extrapolatedFields) {
+        const warning = document.getElementById(id + '-warning'); warning.hidden = false;
+        warning.textContent = 'This value is outside the range observed in the model-development cohort; the prediction therefore involves extrapolation.';
+      }
+    } catch (error) {
+      clearResult('No prediction calculated. Please check the inputs.');
+      const summary = document.getElementById('error-summary'); summary.hidden = false;
+      summary.textContent = error instanceof ACSModel.CalculatorInputError ? 'Please correct the highlighted inputs.' : error.message;
+      if (error.fieldErrors) {
+        for (const [id, message] of Object.entries(error.fieldErrors)) {
+          document.getElementById(id).setAttribute('aria-invalid', 'true');
+          const target = document.getElementById(id + '-error'); target.textContent = message; target.hidden = false;
+        }
+        const first = document.getElementById(Object.keys(error.fieldErrors)[0]);
+        (first.matches('input') ? first : first.querySelector('button')).focus();
+      }
+    }
+  });
+  form.addEventListener('reset', () => {
+    Object.keys(selections).forEach(key => { selections[key] = undefined; });
+    form.querySelectorAll('.seg button').forEach(button => button.setAttribute('aria-pressed', 'false'));
+    clearFeedback(); clearResult('Complete all six inputs and select Calculate probability.');
+  });
 </script>
 </body>
 </html>
